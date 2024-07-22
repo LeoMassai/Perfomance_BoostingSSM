@@ -32,15 +32,13 @@ class ContractiveREN(nn.Module):
         posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0
     ):
         """
-        Args:
-            dim_in (int): Input (u) dimension.
-            dim_out (int): Output (y) dimension.
-            dim_internal (int): Internal state (x) dimension. This state evolves with contraction properties.
-            dim_nl (int): Dimension of the input ("v") and ouput ("w") of the nonlinear static block.
-            initialization_std (float, optional): Weight initialization. Set to 0.1 by default.
-            internal_state_init (torch.Tensor or None, optional): Initial condition for the internal state. Defaults to 0 when set to None.
-            epsilon (float, optional): Positive and negligible scalar to force positive definite matrices.
-            contraction_rate_lb (float, optional): Lower bound on the contraction rate. Defaults to 1.
+        Args: dim_in (int): Input (u) dimension. dim_out (int): Output (y) dimension. dim_internal (int): Internal
+        state (x) dimension. This state evolves with contraction properties. dim_nl (int): Dimension of the input (
+        "v") and ouput ("w") of the nonlinear static block. initialization_std (float, optional): Weight
+        initialization. Set to 0.1 by default. internal_state_init (torch.Tensor or None, optional): Initial
+        condition for the internal state. Defaults to 0 when set to None. epsilon (float, optional): Positive and
+        negligible scalar to force positive definite matrices. contraction_rate_lb (float, optional): Lower bound on
+        the contraction rate. Defaults to 1.
         """
         super().__init__()
 

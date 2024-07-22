@@ -14,11 +14,10 @@ from controllers import PerfBoostController
 from loss_functions import RobotsLoss
 from utils.assistive_functions import WrapLogger
 
-
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'minimal_example', 'saved_results')
-save_folder = os.path.join(save_path, 'perf_boost_'+now)
+save_folder = os.path.join(save_path, 'perf_boost_' + now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
 logger = logging.getLogger('perf_boost_')
@@ -45,8 +44,8 @@ plot_data = plot_data.to(device)
 train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
 
 # ------------ 2. Plant ------------
-plant_input_init = None     # all zero
-plant_state_init = None     # same as xbar
+plant_input_init = None  # all zero
+plant_state_init = None  # same as xbar
 sys = RobotsSystem(
     xbar=dataset.xbar, x_init=plant_state_init,
     u_init=plant_input_init, linear_plant=args.linearize_plant, k=args.spring_const
@@ -56,13 +55,13 @@ sys = RobotsSystem(
 ctl = PerfBoostController(
     noiseless_forward=sys.noiseless_forward,
     input_init=sys.x_init, output_init=sys.u_init,
-    dim_internal=args.dim_internal, dim_nl=args.dim_l,
+    dim_internal=args.dim_internal, dim_nl=args.dim_nl,
     initialization_std=args.cont_init_std,
     output_amplification=20,
 ).to(device)
 
 # ------------ 4. Loss ------------
-Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)   # TODO: move to args and print info
+Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)  # TODO: move to args and print info
 loss_fn = RobotsLoss(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=None, sat_bound=None,
@@ -72,7 +71,7 @@ loss_fn = RobotsLoss(
 )
 
 # ------------ 5. Optimizer ------------
-valid_data = train_data      # use the entire train data for validation
+valid_data = train_data  # use the entire train data for validation
 assert not (valid_data is None and args.return_best)
 optimizer = torch.optim.Adam(ctl.parameters(), lr=args.lr)
 
@@ -81,7 +80,7 @@ optimizer = torch.optim.Adam(ctl.parameters(), lr=args.lr)
 logger.info('Plotting closed-loop trajectories before training the controller...')
 x_log, _, u_log = sys.rollout(ctl, plot_data)
 plot_trajectories(
-    x_log[0, :, :], # remove extra dim due to batching
+    x_log[0, :, :],  # remove extra dim due to batching
     xbar=dataset.xbar, n_agents=sys.n_agents,
     save_folder=save_folder, filename='CL_init.pdf',
     text="CL - before training", T=t_ext,
@@ -91,7 +90,7 @@ plot_trajectories(
 logger.info('\n------------ Begin training ------------')
 best_valid_loss = 1e6
 t = time.time()
-for epoch in range(1+args.epochs):
+for epoch in range(1 + args.epochs):
     # iterate over all data batches
     for train_data_batch in train_dataloader:
         optimizer.zero_grad()
@@ -106,8 +105,8 @@ for epoch in range(1+args.epochs):
         optimizer.step()
 
     # print info
-    if epoch%args.log_epoch == 0:
-        msg = 'Epoch: %i --- train loss: %.2f'% (epoch, loss)
+    if epoch % args.log_epoch == 0:
+        msg = 'Epoch: %i --- train loss: %.2f' % (epoch, loss)
 
         if args.return_best:
             # rollout the current controller on the valid data
@@ -119,7 +118,7 @@ for epoch in range(1+args.epochs):
                 loss_valid = loss_fn.forward(x_log_valid, u_log_valid)
             msg += ' ---||--- validation loss: %.2f' % (loss_valid.item())
             # compare with the best valid loss
-            if loss_valid.item()<best_valid_loss:
+            if loss_valid.item() < best_valid_loss:
                 best_valid_loss = loss_valid.item()
                 best_params = ctl.get_parameters_as_vector()  # record state dict if best on valid
                 msg += ' (best so far)'
@@ -137,7 +136,7 @@ if args.return_best:
 res_dict = ctl.c_ren.state_dict()
 # TODO: append args
 res_dict['Q'] = Q
-filename = os.path.join(save_folder, 'trained_controller'+'.pt')
+filename = os.path.join(save_folder, 'trained_controller' + '.pt')
 torch.save(res_dict, filename)
 logger.info('[INFO] saved trained model.')
 
@@ -146,7 +145,7 @@ logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.
 with torch.no_grad():
     x_log, _, u_log = sys.rollout(
         controller=ctl, data=train_data, train=False,
-    )   # use the entire train data, not a batch
+    )  # use the entire train data, not a batch
     # evaluate losses
     loss = loss_fn.forward(x_log, u_log)
     msg = 'Loss: %.4f' % (loss)

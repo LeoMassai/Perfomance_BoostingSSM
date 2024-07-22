@@ -1,4 +1,3 @@
-
 import sys, os, logging, torch
 from datetime import datetime
 import numpy as np
@@ -13,11 +12,10 @@ from arg_parser import argument_parser, print_args
 from plants import LTIDataset
 from utils.assistive_functions import WrapLogger
 
-
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'LTI', 'saved_results')
-save_folder = os.path.join(save_path, 'perf_boost_'+now)
+save_folder = os.path.join(save_path, 'perf_boost_' + now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
 logger = logging.getLogger('perf_boost_')
@@ -31,11 +29,11 @@ args = argument_parser()
 torch.manual_seed(args.random_seed)
 
 # ------------ 1. Dataset ------------
-d_dist_v = 0.3*np.ones((args.state_dim, 1))
+d_dist_v = 0.3 * np.ones((args.state_dim, 1))
 disturbance = {
-    'type':'N biased',
-    'mean':0.3*np.ones(args.state_dim),
-    'cov':np.matmul(d_dist_v, np.transpose(d_dist_v))
+    'type': 'N biased',
+    'mean': 0.3 * np.ones(args.state_dim),
+    'cov': np.matmul(d_dist_v, np.transpose(d_dist_v))
 }
 dataset = LTIDataset(
     random_seed=args.random_seed, horizon=args.horizon,

@@ -27,9 +27,9 @@ class ContractiveREN(nn.Module):
     """
 
     def __init__(
-        self, dim_in: int, dim_out: int, dim_internal: int,
-        dim_nl: int, internal_state_init = None, initialization_std: float = 0.5,
-        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0
+            self, dim_in: int, dim_out: int, dim_internal: int,
+            dim_nl: int, internal_state_init=None, initialization_std: float = 0.5,
+            posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0
     ):
         """
         Args: dim_in (int): Input (u) dimension. dim_out (int): Output (y) dimension. dim_internal (int): Internal
@@ -75,7 +75,7 @@ class ContractiveREN(nn.Module):
         # v signal
         self.D12_shape = (self.dim_nl, self.dim_in)
 
-        # define trainble params
+        # define trainable params
         self.training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
         self._init_trainable_params(initialization_std)
 
@@ -127,7 +127,7 @@ class ContractiveREN(nn.Module):
         # update each row of w using Eq. (8) with a lower triangular D11
         for i in range(self.dim_nl):
             #  v is element i of v with dim (batch_size, 1)
-            v = F.linear(self.x, self.C1[i, :]) + F.linear(w, self.D11[i, :]) + F.linear(u_in, self.D12[i,:])
+            v = F.linear(self.x, self.C1[i, :]) + F.linear(w, self.D11[i, :]) + F.linear(u_in, self.D12[i, :])
             w = w + (self.eye_mask_w[i, :] * torch.tanh(v / self.Lambda[i])).reshape(batch_size, 1, self.dim_nl)
 
         # compute next state using Eq. 18

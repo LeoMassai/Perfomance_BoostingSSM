@@ -175,7 +175,7 @@ logger.info(msg)
 logger.info('Plotting closed-loop trajectories using the trained controller...')
 x_log, _, u_log = sys.rollout(ctl, plot_data)
 plot_trajectories(
-    x_log[0, :, :], # remove extra dim due to batching
+    x_log[0, :, :],  # remove extra dim due to batching
     xbar=dataset.xbar, n_agents=sys.n_agents,
     save_folder=save_folder, filename='CL_trained.pdf',
     text="CL - trained controller", T=t_ext,

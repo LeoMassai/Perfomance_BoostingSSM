@@ -4,6 +4,7 @@ import numpy as np
 
 from config import device
 from .contractive_ren import ContractiveREN
+from .Robust_REN import REN
 from utils.assistive_functions import to_tensor
 
 
@@ -17,15 +18,16 @@ class PerfBoostController(nn.Module):
         This controller has a memory for the last input ("self.last_input") and
         the last output ("self.last_output").
     """
+
     def __init__(
-        self, noiseless_forward, input_init: torch.Tensor, output_init: torch.Tensor,
-        # acyclic REN properties
-        dim_internal: int, dim_nl: int,
-        initialization_std: float = 0.5,
-        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
-        ren_internal_state_init=None,
-        # misc
-        output_amplification: float=20,
+            self, noiseless_forward, input_init: torch.Tensor, output_init: torch.Tensor,
+            # acyclic REN properties
+            dim_internal: int, dim_nl: int,
+            initialization_std: float = 0.5,
+            posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
+            ren_internal_state_init=None,
+            # misc
+            output_amplification: float = 20,
     ):
         """
          Args:
@@ -53,12 +55,20 @@ class PerfBoostController(nn.Module):
         self.dim_in = self.input_init.shape[-1]
         self.dim_out = self.output_init.shape[-1]
 
-        # define the REN
+        # define the ConstractiveREN
         self.c_ren = ContractiveREN(
             dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
             dim_nl=dim_nl, initialization_std=initialization_std,
             internal_state_init=ren_internal_state_init,
             posdef_tol=posdef_tol, contraction_rate_lb=contraction_rate_lb
+        ).to(device)
+
+        # define the RobustREN
+        self.r_ren = REN(
+            dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
+            dim_nl=dim_nl, initialization_std=initialization_std,
+            internal_state_init=ren_internal_state_init,
+            posdef_tol=posdef_tol
         ).to(device)
 
         # define the system dynamics without process noise
@@ -73,7 +83,7 @@ class PerfBoostController(nn.Module):
         self.t = 0  # time
         self.last_input = self.input_init.detach().clone()
         self.last_output = self.output_init.detach().clone()
-        self.c_ren.x = self.c_ren.init_x    # reset the REN state to the initial value
+        self.c_ren.x = self.c_ren.init_x  # reset the REN state to the initial value
 
     def forward(self, input_t: torch.Tensor):
         """
@@ -95,11 +105,11 @@ class PerfBoostController(nn.Module):
         )  # shape = (self.batch_size, 1, self.dim_in)
 
         # reconstruct the noise
-        w_ = input_t - u_noiseless # shape = (self.batch_size, 1, self.dim_in)
+        w_ = input_t - u_noiseless  # shape = (self.batch_size, 1, self.dim_in)
 
         # apply REN
-        output = self.c_ren.forward(w_)
-        output = output*self.output_amplification   # shape = (self.batch_size, 1, self.dim_out)
+        output = self.r_ren.forward(w_)
+        output = output * self.output_amplification  # shape = (self.batch_size, 1, self.dim_out)
 
         # update internal states
         self.last_input, self.last_output = input_t, output
@@ -121,7 +131,7 @@ class PerfBoostController(nn.Module):
         current_val = getattr(self.c_ren, name)
         value = torch.nn.Parameter(value.reshape(current_val.shape))
         setattr(self.c_ren, name, value)
-        self.c_ren._update_model_param()    # update dependent params
+        self.c_ren._update_model_param()  # update dependent params
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():
@@ -133,7 +143,7 @@ class PerfBoostController(nn.Module):
             if len(shape) == 1:
                 dim = shape
             elif len(shape) == 2:
-                dim = shape[0]*shape[1]
+                dim = shape[0] * shape[1]
             else:
                 raise NotImplementedError
             idx_next = idx + dim

@@ -8,15 +8,15 @@ from collections import OrderedDict
 class REN(nn.Module):
     # ## Implementation of REN model, modified from "Recurrent Equilibrium Networks: Flexible Dynamic Models with
     # Guaranteed Stability and Robustness" by Max Revay et al.
-    def __init__(self, dim_in: int, dim_out: int, dim_state: int,
-                 dim_l: int, internal_state_init=None, mode="l2stable", gamma: float = 0.3, Q=None, R=None, S=None,
-                 initialization_std: float = 0.5, posdef_tol: float = 0.001):
+    def __init__(self, dim_in: int, dim_out: int, dim_internal: int,
+                 dim_nl: int, initialization_std: float = 0.5, internal_state_init=None, mode="l2stable", gamma: float = 0.3, Q=None, R=None, S=None
+           , posdef_tol: float = 0.001):
         super().__init__()
 
         # set dimensions
         self.dim_in = dim_in  # input dimension m
-        self.dim_state = dim_state  # state dimension n
-        self.dim_l = dim_l  # dimension of v(t) and w(t) l
+        self.dim_internal = dim_internal  # state dimension n
+        self.dim_nl = dim_nl  # dimension of v(t) and w(t) l
         self.dim_out = dim_out  # output dimension p
 
         self.mode = mode
@@ -29,16 +29,16 @@ class REN(nn.Module):
         # # # # # # # # # Training parameters # # # # # # # # #
         # Sparse training matrix parameters
         # define matrices shapes
-        self.X_shape = (2 * dim_state + dim_l, 2 * dim_state + dim_l)
-        self.Y_shape = (dim_state, dim_state)
+        self.X_shape = (2 * dim_internal + dim_nl, 2 * dim_internal + dim_nl)
+        self.Y_shape = (dim_internal, dim_internal)
         # nn state dynamics
-        self.B2_shape = (dim_state, dim_in)
+        self.B2_shape = (dim_internal, dim_in)
         # nn output
-        self.C2_shape = (dim_out, dim_state)
+        self.C2_shape = (dim_out, dim_internal)
         #self.D21_shape = (self.dim_out, self.dim_l)
         self.D22_shape = (dim_out, dim_in)
         # v signal
-        self.D12_shape = (dim_l, dim_in)
+        self.D12_shape = (dim_nl, dim_in)
         self.Z3_shape = (abs(dim_out - dim_in), min(dim_out, dim_in))
         self.X3_shape = (min(dim_out, dim_in), min(dim_out, dim_in))
         self.Y3_shape = (min(dim_out, dim_in), min(dim_out, dim_in))
@@ -52,13 +52,16 @@ class REN(nn.Module):
         self.register_buffer('eye_mask_min', torch.eye(min(dim_in, dim_out)))
         self.register_buffer('eye_mask_dim_in', torch.eye(dim_in))
         self.register_buffer('eye_mask_dim_out', torch.eye(dim_out))
-        self.register_buffer('eye_mask_dim_state', torch.eye(dim_state))
-        self.register_buffer('eye_mask_H', torch.eye(2 * dim_state + dim_l))
+        self.register_buffer('eye_mask_dim_state', torch.eye(dim_internal))
+        self.register_buffer('eye_mask_H', torch.eye(2 * dim_internal + dim_nl))
         self.register_buffer('zeros_mask_S', torch.zeros(dim_in, dim_out))
         self.register_buffer('zeros_mask_Q', torch.zeros(dim_out, dim_out))
         self.register_buffer('zeros_mask_R', torch.zeros(dim_in, dim_in))
-        self.register_buffer('zeros_mask_so', torch.zeros(dim_state, dim_out))
-        self.register_buffer('eye_mask_w', torch.eye(dim_l))
+        self.register_buffer('zeros_mask_so', torch.zeros(dim_internal, dim_out))
+        self.register_buffer('eye_mask_w', torch.eye(dim_nl))
+        self.register_buffer('D21', torch.zeros(dim_out, dim_nl))
+
+
 
         # initialize internal state
         if internal_state_init is None:
@@ -72,7 +75,7 @@ class REN(nn.Module):
         self.set_param(gamma)
 
     def set_param(self, gamma=0.3):
-        dim_state, l, dim_in, dim_out = self.dim_state, self.l, self.dim_in, self.dim_out
+        dim_internal, dim_nl, dim_in, dim_out = self.dim_internal, self.dim_nl, self.dim_in, self.dim_out
         # Updating of Q,S,R with variable gamma if needed
         self.Q, self.R, self.S = self._set_mode(self.mode, gamma, self.Q, self.R, self.S)
         M = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
@@ -105,10 +108,10 @@ class REN(nn.Module):
         psi_q = torch.matmul(vec_q, torch.matmul(self.Q, vec_q.T))
         # Create H matrix:
         H = torch.matmul(self.X.T, self.X) + self.epsilon * self.eye_mask_H + psi_r - psi_q
-        h1, h2, h3 = torch.split(H, [dim_state, l, dim_state], dim=0)
-        H11, H12, H13 = torch.split(h1, [dim_state, l, dim_state], dim=1)
-        H21, H22, _ = torch.split(h2, [dim_state, l, dim_state], dim=1)
-        H31, H32, H33 = torch.split(h3, [dim_state, l, dim_state], dim=1)
+        h1, h2, h3 = torch.split(H, [dim_internal, dim_nl, dim_internal], dim=0)
+        H11, H12, H13 = torch.split(h1, [dim_internal, dim_nl, dim_internal], dim=1)
+        H21, H22, _ = torch.split(h2, [dim_internal, dim_nl, dim_internal], dim=1)
+        H31, H32, H33 = torch.split(h3, [dim_internal, dim_nl, dim_internal], dim=1)
         self.P_cal = H33
         # NN state dynamics:
         self.F = H31
@@ -122,25 +125,24 @@ class REN(nn.Module):
         # Matrix P
         self.P = torch.matmul(self.E.T, torch.matmul(torch.inverse(self.P_cal), self.E))
 
-    def forward(self, u, t):
+    def forward(self, u):
         self.set_param()
         decay_rate = 0.95
         batch_size = u.shape[0]
-        w = torch.zeros(batch_size, 1, self.dim_l, device=u.device)
+        w = torch.zeros(batch_size, 1, self.dim_nl, device=u.device)
         # update each row of w using Eq. (8) with a lower triangular D11
-        for i in range(self.dim_l):
+        for i in range(self.dim_nl):
             #  v is element i of v with dim (batch_size, 1)
-            v = F.linear(self.x, self.C1[i, :]) + F.linear(w, self.D11[i, :]) + F.linear(u, self.D12[i, :]) + (
-                    decay_rate ** t) * self.bv[i]
+            v = F.linear(self.x, self.C1[i, :]) + F.linear(w, self.D11[i, :]) + F.linear(u, self.D12[i, :])
             w = w + (self.eye_mask_w[i, :] * torch.tanh(v / self.Lambda[i])).reshape(batch_size, 1, self.dim_nl)
 
         # compute next state using Eq. 18
         self.x = F.linear(
-            F.linear(self.x, self.F) + F.linear(w, self.B1) + F.linear(u, self.B2) + (decay_rate ** t) * self.bx,
+            F.linear(self.x, self.F) + F.linear(w, self.B1) + F.linear(u, self.B2),
             self.E.inverse())
 
         # compute output
-        y = F.linear(self.x, self.C2) + F.linear(w, self.D21) + F.linear(u, self.D22) + (decay_rate ** t) * self.bx
+        y = F.linear(self.x, self.C2) + F.linear(w, self.D21) + F.linear(u, self.D22)
 
         return y
 

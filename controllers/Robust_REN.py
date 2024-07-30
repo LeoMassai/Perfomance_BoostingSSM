@@ -9,8 +9,9 @@ class REN(nn.Module):
     # ## Implementation of REN model, modified from "Recurrent Equilibrium Networks: Flexible Dynamic Models with
     # Guaranteed Stability and Robustness" by Max Revay et al.
     def __init__(self, dim_in: int, dim_out: int, dim_internal: int,
-                 dim_nl: int, initialization_std: float = 0.5, internal_state_init=None, mode="l2stable", gamma: float = 0.3, Q=None, R=None, S=None
-           , posdef_tol: float = 0.001):
+                 dim_nl: int, initialization_std: float = 0.5, internal_state_init=None, mode="l2stable",
+                 gamma: float = 0.3, Q=None, R=None, S=None
+                 , posdef_tol: float = 0.001):
         super().__init__()
 
         # set dimensions
@@ -61,11 +62,9 @@ class REN(nn.Module):
         self.register_buffer('eye_mask_w', torch.eye(dim_nl))
         self.register_buffer('D21', torch.zeros(dim_out, dim_nl))
 
-
-
         # initialize internal state
         if internal_state_init is None:
-            self.x = torch.zeros(1, 1, self.dim_internal)
+            self.x = torch.zeros(1, 1, self.dim_internal, device="cuda")
         else:
             assert isinstance(internal_state_init, torch.Tensor)
             self.x = internal_state_init.reshape(1, 1, self.dim_internal)

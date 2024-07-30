@@ -83,7 +83,7 @@ class PerfBoostController(nn.Module):
         self.t = 0  # time
         self.last_input = self.input_init.detach().clone()
         self.last_output = self.output_init.detach().clone()
-        self.c_ren.x = self.c_ren.init_x  # reset the REN state to the initial value
+        self.r_ren.x = self.r_ren.init_x  # reset the REN state to the initial value
 
     def forward(self, input_t: torch.Tensor):
         """
@@ -118,20 +118,20 @@ class PerfBoostController(nn.Module):
 
     # setters and getters
     def get_parameter_shapes(self):
-        return self.c_ren.get_parameter_shapes()
+        return self.r_ren.get_parameter_shapes()
 
     def get_named_parameters(self):
-        return self.c_ren.get_named_parameters()
+        return self.r_ren.get_named_parameters()
 
     def get_parameters_as_vector(self):
         # TODO: implement without numpy
-        return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.c_ren.parameters()])
+        return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.r_ren.parameters()])
 
     def set_parameter(self, name, value):
-        current_val = getattr(self.c_ren, name)
+        current_val = getattr(self.r_ren, name)
         value = torch.nn.Parameter(value.reshape(current_val.shape))
-        setattr(self.c_ren, name, value)
-        self.c_ren._update_model_param()  # update dependent params
+        setattr(self.r_ren, name, value)
+        self.r_ren._update_model_param()  # update dependent params
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():

@@ -106,7 +106,7 @@ for epoch in range(1 + args.epochs):
 
     # print info
     if epoch % args.log_epoch == 0:
-        msg = 'Epoch: %i --- train loss: %.2f' % (epoch, loss)
+        msg = 'Epoch: %i --- train loss: %i --- gamma%.2f' % (epoch, loss, ctl.r_ren.gamma)
 
         if args.return_best:
             # rollout the current controller on the valid data

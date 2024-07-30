@@ -9,8 +9,8 @@ class REN(nn.Module):
     # ## Implementation of REN model, modified from "Recurrent Equilibrium Networks: Flexible Dynamic Models with
     # Guaranteed Stability and Robustness" by Max Revay et al.
     def __init__(self, dim_in: int, dim_out: int, dim_internal: int,
-                 dim_nl: int, initialization_std: float = 0.5, internal_state_init=None, mode="l2stable",
-                 gamma: float = 0.3, Q=None, R=None, S=None
+                 dim_nl: int, initialization_std: float = 0.5, internal_state_init=None, gammat=None, mode="l2stable",
+                 Q=None, R=None, S=None
                  , posdef_tol: float = 0.001):
         super().__init__()
 
@@ -21,7 +21,7 @@ class REN(nn.Module):
         self.dim_out = dim_out  # output dimension p
 
         self.mode = mode
-        self.gamma = gamma
+        self.gammat = gammat
         self.epsilon = posdef_tol
         # # # # # # # # # IQC specification # # # # # # # # #
         self.Q = Q
@@ -43,9 +43,18 @@ class REN(nn.Module):
         self.Z3_shape = (abs(dim_out - dim_in), min(dim_out, dim_in))
         self.X3_shape = (min(dim_out, dim_in), min(dim_out, dim_in))
         self.Y3_shape = (min(dim_out, dim_in), min(dim_out, dim_in))
+        self.gamma_shape = (1, 1)
+
+        self.training_param_names = ['X', 'Y', 'B2', 'C2', 'Z3', 'X3', 'Y3', 'D12']
+
+        # Optionally define a trainable gamma
+        if self.gammat is None:
+            self.training_param_names.append('gamma')
+        else:
+            self.gamma = gammat
 
         # define trainable params
-        self.training_param_names = ['X', 'Y', 'B2', 'C2', 'Z3', 'X3', 'Y3', 'D12']
+
         self._init_trainable_params(initialization_std)
 
         # # # # # # # # # Non-trainable parameters and constant tensors # # # # # # # # #
@@ -71,10 +80,14 @@ class REN(nn.Module):
         self.register_buffer('init_x', self.x.detach().clone())
 
         # Auxiliary elements
-        self.set_param(gamma)
+        self.set_param()
 
-    def set_param(self, gamma=0.3):
+    def set_param(self, gamman=None):
+        if gamman is not None:
+            self.gamma = gamman
+        gamma = torch.abs(self.gamma)
         dim_internal, dim_nl, dim_in, dim_out = self.dim_internal, self.dim_nl, self.dim_in, self.dim_out
+
         # Updating of Q,S,R with variable gamma if needed
         self.Q, self.R, self.S = self._set_mode(self.mode, gamma, self.Q, self.R, self.S)
         M = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
@@ -145,7 +158,7 @@ class REN(nn.Module):
 
         return y
 
-    def _set_mode(self, mode, gamma: float, Q, R, S, eps: float = 1e-4):
+    def _set_mode(self, mode, gamma, Q, R, S, eps: float = 1e-4):
         # We set Q to be negative definite. If Q is nsd we set: Q - \epsilon I.
         # I.e. The Q we define here is denoted as \matcal{Q} in REN paper.
         if mode == "l2stable":
@@ -193,6 +206,8 @@ class REN(nn.Module):
             # read the defined shapes of the selected training param, e.g., X_shape
             shape = getattr(self, training_param_name + '_shape')
             # define the selected param (e.g., self.X) as nn.Parameter
+            if training_param_name == 'gamma':
+                initialization_std = 3
             setattr(self, training_param_name, nn.Parameter((torch.randn(*shape) * initialization_std)))
 
         # setters and getters

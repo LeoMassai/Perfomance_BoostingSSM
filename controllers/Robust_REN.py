@@ -110,10 +110,10 @@ class REN(nn.Module):
                                                                                                           torch.matmul(
                                                                                                               self.Q,
                                                                                                               self.D22))
-        R_cal_inv = torch.linalg.inv(R_cal)
-        C2_cal = torch.matmul(torch.matmul(self.D22.T, self.Q) + self.S, self.C2).T
-        D21_cal = torch.matmul(torch.matmul(self.D22.T, self.Q) + self.S, self.D21).T - self.D12
-        vec_r = torch.cat((C2_cal, D21_cal, self.B2), dim=0)
+        R_cal_inv = torch.inverse(R_cal)
+        C2_cal = torch.matmul(torch.matmul(self.D22.T, self.Q) + self.S, self.C2)
+        D21_cal = torch.matmul(torch.matmul(self.D22.T, self.Q) + self.S, self.D21) - self.D12.T
+        vec_r = torch.cat((C2_cal.T, D21_cal.T, self.B2), dim=0)
         psi_r = torch.matmul(vec_r, torch.matmul(R_cal_inv, vec_r.T))
         # Calculate psi_q:
         vec_q = torch.cat((self.C2.T, self.D21.T, self.zeros_mask_so), dim=0)
@@ -135,7 +135,7 @@ class REN(nn.Module):
         self.D11 = -torch.tril(H22, diagonal=-1)
         self.C1 = -H21
         # Matrix P
-        self.P = torch.matmul(self.E.T, torch.matmul(torch.inverse(self.P_cal), self.E))
+        #self.P = torch.matmul(self.E.T, torch.matmul(torch.inverse(self.P_cal), self.E))
 
     def forward(self, u):
         self.set_param()

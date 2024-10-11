@@ -1,5 +1,8 @@
 import torch
 import time
+import math
+import torch.nn.functional as F
+
 
 
 
@@ -47,6 +50,8 @@ def U_at_A(A):
     return output
 
 
+
+
 def pscan_fft_efficient(A, X):
     N, T, D = X.shape
     device = X.device
@@ -75,30 +80,80 @@ def pscan_fft_efficient(A, X):
     return Y
 
 
-N, T, D = 20, 11028, 6
-A = torch.randn(N, T).requires_grad_().cuda() / 10 + 1
+N, T, D = 3, 9, 1
+
+device = 'cuda'
+rmin=0.2
+rmax=.7
+max_phase=6.283
+u1 = torch.rand(N)
+u2 = torch.rand(N)
+nu_log = torch.log(-0.5 * torch.log(u1 * (rmax + rmin) * (rmax - rmin) + rmin ** 2))
+theta_log = torch.log(max_phase * u2)
+theta_log = torch.log(max_phase * u2)
+Lambda_mod = torch.exp(-torch.exp(nu_log))
+Lambda_re = Lambda_mod * torch.cos(torch.exp(theta_log))
+Lambda_im = Lambda_mod * torch.sin(torch.exp(theta_log))
+Lambda = torch.complex(Lambda_re, Lambda_im)  # Eigenvalues matrix
+Lambda = Lambda.to(device)
+Lambda = Lambda.unsqueeze(1)
+Ac = torch.tile(Lambda, (1, T))
+
+
+
+A = torch.randn(N, T).requires_grad_().cuda() + 1
 X = torch.randn(N, T, D).requires_grad_().cuda()
+
+
+udim=3
+
+u = torch.randn(udim, T, D).requires_grad_().cuda()
+B_re = torch.randn([N, udim]).requires_grad_().cuda() / math.sqrt(2 * udim)
+B_im = torch.randn([N, udim]).requires_grad_().cuda() / math.sqrt(2 * udim)
+b = torch.complex(B_re, B_im)
+
+
+
+# Unsqueeze b to make its shape (N, V, 1, 1)
+b_unsqueezed = b.unsqueeze(-1).unsqueeze(-1)
+
+# Now broadcast b along dimensions T and D so it can be multiplied elementwise with u
+b_broadcasted = b_unsqueezed.expand(N, udim, T, D)
+
+# Expand u so that it can be multiplied along dimension N, resulting in shape (N, V, T, D)
+u_broadcasted = u.unsqueeze(0).expand(N, udim, T, D)
+
+# Elementwise multiplication and then sum over V (the second dimension)
+x = torch.sum(b_broadcasted * u_broadcasted, dim=1)
 
 
 
 t0= time.time()
 
-qq=pscan_fft_efficient(A, X)
+qq=pscan_fft_efficient(Ac, x)
 
 t1= time.time()
 
 tscan = t1-t0
 
 
+
+
 t0= time.time()
 
-qq2 = torch.zeros(N, T, D, dtype=torch.float).requires_grad_().cuda()
+
+qq2=torch.complex(torch.zeros(N, T, D, dtype=torch.float).requires_grad_().cuda(),
+                  torch.zeros(N, T, D, dtype=torch.float).requires_grad_().cuda())
 qq2[:, 0, :] = X[:, 0, :]
-for k in range(1, X.shape[1]):
-    qq2[:, k, :] = A[:, k - 1].unsqueeze(1) * qq2[:, k - 1, :] + X[:, k, :]
+for k in range(1, x.shape[1]):
+    qq2[:, k, :] = Ac[:, k - 1].unsqueeze(1) * qq2[:, k - 1, :] + x[:, k-1, :]
+
+
+
 
 t1 = time.time()
 
 tnaiv = t1-t0
 
 qq2
+
